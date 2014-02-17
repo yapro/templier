@@ -1,0 +1,20 @@
+# Отключаем добавление генерируемых id автоматически добавляемых к URI ссылок
+php_value session.use_trans_sid 0
+
+# Отключаем просмотр директорий
+Options -Indexes
+
+# Пользователь не прошел аутентификацию, доступ запрещен - Directory index forbidden
+ErrorDocument 403 /
+
+# Отключаем вывод ошибок пхп
+php_value display_errors 1
+
+RewriteEngine On
+RewriteBase /
+
+# Обработка любого урл файлом index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{SCRIPT_FILENAME} !server-status
+RewriteRule . /index.php [L]
