@@ -7,7 +7,10 @@ Options -Indexes
 # Пользователь не прошел аутентификацию, доступ запрещен - Directory index forbidden
 ErrorDocument 403 /
 
-# Отключаем вывод ошибок пхп
+# Редирект для невозможности обратиться к собственному файлу настроек
+Redirect 301 /my.php /outer/404.php
+
+# Отключаем вывод ошибок пхп - установите 0
 php_value display_errors 1
 
 RewriteEngine On

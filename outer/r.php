@@ -3,8 +3,6 @@ error_reporting(E_ERROR | E_PARSE | E_COMPILE_ERROR);
 setlocale(LC_ALL, 'ru_RU.UTF-8');
 mb_internal_encoding("UTF-8");
 
-if(mb_substr($_SERVER['DOCUMENT_ROOT'], -1)=='/'){ $_SERVER['DOCUMENT_ROOT'] = mb_substr($_SERVER['DOCUMENT_ROOT'], 0, -1); }
-
 $url = explode('/outer/r.php?to=', $_SERVER['REQUEST_URI']);
 $url = $url['1'];
 

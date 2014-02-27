@@ -1,66 +1,49 @@
 <?php
-error_reporting(E_ERROR | E_PARSE | E_COMPILE_ERROR);
-define('_', '~'.md5(uniqid(time())).'~');// спец. хэш
+error_reporting(E_ERROR | E_PARSE | E_COMPILE_ERROR | E_NOTICE);
 setlocale(LC_ALL, 'ru_RU.UTF-8');
 mb_internal_encoding("UTF-8");
 @session_start();// заводим сессию
 
+define('_', '~'.md5(uniqid(time())).'~');// спец. хэш
+
 if(mb_substr($_SERVER['DOCUMENT_ROOT'], -1)=='/'){ $_SERVER['DOCUMENT_ROOT'] = mb_substr($_SERVER['DOCUMENT_ROOT'], 0, -1); }
 
+$GLOBALS['Templier']['increment'] = 0;
+$GLOBALS['Templier']['before'] = array();
+$GLOBALS['Templier']['after'] = array();
+
+/**
+ * сохраняет заданную строку в массив $GLOBALS['Templier']['before'],
+ * добавляет инкремент строки (для ее восстановления) в массив $GLOBALS['Templier']['after'],
+ * и возвращает инкремент для замены данной строки
+ * @param $s
+ * @return string
+ */
+function htmlSave($s){
+    // в связи с регуляркой данные поступают в эскепированном виде, поэтому мы их правильно расслэшиваем (оставляя слэши там где нужно)
+    $s = str_replace('Save'._.'escapes', "\'", stripslashes( str_replace("\'", 'Save'._.'escapes', $s)));
+    $GLOBALS['Templier']['increment']++;
+    $GLOBALS['Templier']['before'][$GLOBALS['Templier']['increment']] = $s;
+    return $GLOBALS['Templier']['after'][ $GLOBALS['Templier']['increment'] ] = '['._.$GLOBALS['Templier']['increment'].']';
+}
+
+/**
+ * находит в тексте ИНКРЕМЕНТ строки, и заменяет его на реальные данные строки из массива $GLOBALS['Templier']['before']
+ * @param $s
+ * @return mixed
+ */
+function htmlBack($s){
+    if($s && $GLOBALS['Templier']['after'] && $GLOBALS['Templier']['before']){
+        $level = 0;
+        while($s && mb_stristr($s, '[~') && $level<10){
+            $level++;
+            $s = str_replace($GLOBALS['Templier']['after'], $GLOBALS['Templier']['before'], $s);
+        }
+    }
+    return $s;
+}
+
 class Templier {
-
-    private $document = '';
-
-    private $increment = 0;
-    private $before = array();
-    private $after = array();
-
-    /**
-     * сохраняет заданную строку в массив $this->before, 
-     * добавляет инкремент строки (для ее восстановления) в массив $GLOBALS['HTML']['after'], 
-     * и возвращает инкремент для замены данной строки
-     * @param $s
-     * @return string
-     */
-    function htmlSave($s){
-        $s = $this->realslash( stripslashes($s) );
-        $this->increment++;
-        $this->before[ $this->increment ] = $s;
-        return $this->after[ $this->increment ] = '['._.$this->increment.']';
-    }
-
-    /**
-     * находит в тексте ИНКРЕМЕНТ строки, и заменяет его на реальные данные строки из массива $this->before
-     * @param $s
-     * @return mixed
-     */
-    private function htmlBack($s){
-        if($s && $this->after && $this->before){
-            $level = 0;
-            while($s && mb_stristr($s, '[~') && $level<10){
-                $level++;
-                $s = str_replace($this->after, $this->before, $s);
-            }
-        }
-        return $s;
-    }
-
-    /**
-     * удаляет возможное автоматическое эскепирование текста в POST и GET запросах
-     * @param $s
-     * @return mixed
-     */
-    private function realslash($s){
-        if(ini_get('magic_quotes_gpc')=='1'){// если \ заменяется на \\, производим обратную замену
-            $s = str_replace(_, "\\", str_replace("\\", '', str_replace("\\\\", _, $s)));
-            /*
-            1. меняем ~SuniqueS~ на \\
-            2. уничтожаем \
-            3. меняем ~SuniqueS~ на \
-            */
-        }
-        return $s;
-    }
 
     /**
      * возвращает полный путь к файлу (вспомогательная ф-я для ф-ии подобной content)
@@ -77,118 +60,6 @@ class Templier {
 			return $_SERVER['DOCUMENT_ROOT'].'/'.$file_path;
 		}
 	}
-
-    /**
-     * проверка и вставка по найденному
-     * @param string $system_document
-     * @param int $level
-     * @return string
-     */
-    private function content(&$system_document='', $level=0){
-		
-		if(!$system_document){ return ''; }
-		
-        // находим то, что между { и } то есть находим имена файлов в которых тоже надо порыться    {~$s='5'; function1();.filename.code~}
-        preg_match_all('/(?<={~).+?(?=~})/i', $system_document, $system_found_names);
-		
-        if($system_found_names['0']){
-			
-            foreach($system_found_names['0'] as $system_name){// пробегаем по массиву
-				
-				$system_ex = array_reverse( explode('.', $system_name) );
-				
-				$system_processing = $system_ex['0'];
-
-                $document = '';
-				
-				switch ($system_ex['0']){
-
-					case 'html':// шаблон
-						
-						$document = @file_get_contents( dirname(__FILE__).'/templates/'.$system_name );
-						break;
-						
-					case 'php':// скрипт ИЛИ пхп-код~AND~скрипт
-						
-						ob_start();
-						unset($system_filename, $system_ex_code, $system_ex_string_n);
-						$system_filename = $system_name;
-						$system_ex_code = array_reverse(explode('~AND~', $system_name));
-						if($system_ex_code['1']){
-							$system_ex_string_n = explode("\n", $system_ex_code['1']);
-							if($system_ex_string_n){
-								foreach($system_ex_string_n as $system_ex_string_v){
-									if($system_ex_string_v){
-										eval($system_ex_string_v);
-									}
-								}
-							}
-							$system_filename = $system_ex_code['0'];
-						}
-						$system_filename = (strstr($system_filename,'/')? '' : 'inner/').$system_filename;
-						$system_filename = $this-> path($system_filename);
-						if(is_file($system_filename)){
-							include($system_filename);
-						}
-						$document .= ob_get_contents();
-						ob_end_clean();
-						break;
-						
-					case '$':// вычисляем строку как PHP-код
-						
-						ob_start();
-						$code = '';
-						for($i=1; $i<count($system_ex); $i++){ $code = $system_ex[$i].'.'.$code; }
-						$system_ex_string_n = explode("\n", mb_substr($code,0,-1) );
-						if($system_ex_string_n){
-							foreach($system_ex_string_n as $system_ex_string_v){
-								if($system_ex_string_v){
-									eval ($system_ex_string_v);
-								}
-							}
-						}
-						$document .= ob_get_contents();
-						ob_end_clean();
-						break;
-						
-					default:
-						
-						if(mb_substr($system_name, 0, 1)=='$'){// php-переменная
-							
-							if(!$this->depth[$system_name] || $this->depth[$system_name]<7){// 7 - максимальный уровень вложенности
-								
-								eval('$document = '.$system_name.';');
-								
-								if(!$document){// даем возможность проверить данный код в более глубоком уровне вложенности
-									$document = '{~'.$system_name.'~}'; 
-									$this->depth[$system_name]++;
-								}
-							}
-							
-						}else{// просто выставляем пустое значение
-							$document = '';
-						}
-				}
-				$system_document = str_replace('{~'.$system_name.'~}', $document, $system_document);
-				/*
-				log_("Уровень вложенности: ".$level.
-				"\n--------------\n".
-				"Проверка кода:\n{~".$system_name."~}".
-				"\n----------------------\n".
-				"Получаемое содержание:\n".$document.
-				"\n------------------------\n".
-				"Cодержание после замены:\n".$system_document);
-				*/
-				$system_ex = $document = '';
-			}
-			if($level>25){
-				$system_document .= '<h1 style="color: #FF0000">Внимание: уровень вложенности привысил отметку 25</h1>';
-			}else if(stristr($system_document, '{~')){
-				$level++;
-				$this-> content($system_document, $level);
-			}
-        }
-    }
 
     /**
      * очищает текст от кода, который непозволителен в выводе атрибутов HTML-тегов и мнемонизирует его
@@ -221,17 +92,16 @@ class Templier {
      */
     private function meta(){
 		
-		if(!$this->systemMeta){// если мета-данные не указаны - находим их по содержанию
-			preg_match_all('/<!--MetaData-->(.+)<!--\/MetaData-->/sUiu', $this->document, $meta);
-			if($meta['1']){
-				foreach($meta['1'] as $v){
-					if($v){ $this->systemMeta .= $v.' '; }
-				}
-			}
-		}
+		$metaData = '';// находим мета-данные по содержанию
+        preg_match_all('/<!--MetaData-->(.+)<!--\/MetaData-->/sUiu', $this->content, $meta);
+        if($meta['1']){
+            foreach($meta['1'] as $v){
+                if($v){ $metaData .= $v.' '; }
+            }
+        }
 
         $title = $keywords = $description = '';
-        $text = $this-> clear($this->systemMeta);
+        $text = $this->clear($metaData);
 		
 		if($text){
 			
@@ -254,11 +124,11 @@ class Templier {
 
 		$titleData = str_replace('&amp;', '&', trim($title));
 		if(mb_substr($titleData,-1)=='\\'){ $titleData = mb_substr($titleData,0,-1); }
-		$this->document = str_replace('[~title~]', $titleData, $this->document);
+		$this->content = str_replace('[~title~]', $titleData, $this->content);
 
 		$descriptionData = trim($description);
 		if(mb_substr($descriptionData,-1)=='\\'){ $descriptionData = mb_substr($descriptionData,0,-1); }
-		$this->document = str_replace('[~description~]', $descriptionData, $this->document);
+		$this->content = str_replace('[~description~]', $descriptionData, $this->content);
 		
 		$keywordsData = mb_substr(trim($keywords), 0, -1);// удаляем последнюю запятую
 		$keywordsData = preg_replace("'\&(.+)\;'sUi", '',
@@ -267,7 +137,7 @@ class Templier {
                     str_replace(',,', ',',
                         str_replace(':,', ',', $keywordsData)))));
 		if(mb_substr($keywordsData,-1)=='\\'){ $keywordsData = mb_substr($keywordsData,0,-1); }
-		$this->document = str_replace('[~keywords~]', $keywordsData, $this->document);
+		$this->content = str_replace('[~keywords~]', $keywordsData, $this->content);
     }
 
     /**
@@ -304,10 +174,10 @@ class Templier {
      */
     private function beforeLinksReplace(){
 		
-		if($this->document){
+		if($this->content){
     		
-    		$body = spliti('<body', $this->document);
-			if($body['1']){
+    		$body = preg_split("/<body/i", $this->content);
+			if(isset($body['1'])){
 				$doc = $body['1'];
 			}else{
 				$doc = $body['0'];
@@ -315,28 +185,28 @@ class Templier {
 			
 			// метод замены строк содержащих символ " пока не разработан!
 			
-			if($escape_script = preg_replace('/<script(.+)<\/script>/sUei', "$this->htmlSave('<script\\1</script>')", $doc)){
+			if($escape_script = preg_replace('/<script(.+)<\/script>/sUei', "htmlSave('<script\\1</script>')", $doc)){
 				$doc = $escape_script;
 			}
-			if($escape_css = preg_replace('/<style(.+)<\/style>/sUei', "$this->htmlSave('<style\\1</style>')", $doc)){
+			if($escape_css = preg_replace('/<style(.+)<\/style>/sUei', "htmlSave('<style\\1</style>')", $doc)){
 				$doc = $escape_css;
 			}
-			if($escape_textarea = preg_replace('/<textarea(.+)<\/textarea>/sUei', "$this->htmlSave('<textarea\\1</textarea>')", $doc)){
+			if($escape_textarea = preg_replace('/<textarea(.+)<\/textarea>/sUei', "htmlSave('<textarea\\1</textarea>')", $doc)){
 				$doc = $escape_textarea;
 			}
-			if($escape_input = preg_replace('/<input(.+)>/sUei', "$this->htmlSave('<input\\1>')", $doc)){
+			if($escape_input = preg_replace('/<input(.+)>/sUei', "htmlSave('<input\\1>')", $doc)){
 				$doc = $escape_input;
 			}
-			if($escape_img = preg_replace('/<img(.+)>/sUei', "$this->htmlSave('<img\\1>')", $doc)){
+			if($escape_img = preg_replace('/<img(.+)>/sUei', "htmlSave('<img\\1>')", $doc)){
 				$doc = $escape_img;
 			}
-			if($escape_a = preg_replace('/<!--NoReplace-->(.+)<!--\/NoReplace-->/sUei', "$this->htmlSave('\\1')", $doc)){
+			if($escape_a = preg_replace('/<!--NoReplace-->(.+)<!--\/NoReplace-->/sUei', "htmlSave('\\1')", $doc)){
 				$doc = $escape_a;
 			}
-			if($body['1']){
-				$this->document = $body['0'].'<body'.$doc;
+			if( isset($body['1']) ){
+				$this->content = $body['0'].'<body'.$doc;
 			}else{
-				$this->document = $doc;
+				$this->content = $doc;
 			}
 		}
     }
@@ -351,37 +221,234 @@ class Templier {
         return $str;
     }
 
-	function __construct(){
-		
-		$tpl = ($_SERVER['REQUEST_URI']=='/')? '/index.html' : $_SERVER['REQUEST_URI'];
+    /**
+     * @param $error_message
+     * @throws Exception
+     */
+    function header404($error_message = ''){
 
-        $filePath = $_SERVER['DOCUMENT_ROOT'].'/templates'.$tpl;
-		
-		// начинаю построение документа
-		$this->document = @file_get_contents($filePath);
-		
-		if(!$this->document){ $this-> headers(); echo 'Шаблон страницы не найден или не имеет содержания!'; exit; }
+        header("HTTP/1.0 404 Not Found");
 
-		$this-> content($this->document);// получаем содержание страницы
+        // раньше была задержка в 1 сек. которая была нужна для правильного сбора JS статистики
+        echo '<META HTTP-EQUIV="Refresh" CONTENT="0; URL=http://'.$_SERVER['HTTP_HOST'].'/outer/404.php">';
 
-        $this-> beforeLinksReplace();// сохраняем данные в которых нельзя производить замены
+        $messages = array();
 
-        $preg_quote_host = preg_quote_($_SERVER['HTTP_HOST']);
-
-        if($doc = preg_replace('/<a(.+)href=("|\'|)http:\/\/(?!'.$preg_quote_host.'|www\.'.$preg_quote_host.')(.*)("|\'|\s|)>/sUi', '<a$1href=$2http://'.$_SERVER['HTTP_HOST'].'/outer/r.php?to=http://$3$4 target=_blank>', $this->document)){
-            $this->document = $doc;
+        if( isset($_SERVER['REQUEST_URI']) ){
+            $messages[] = 'не найдена страница: '.$_SERVER['REQUEST_URI'];
+            $messages[] = 'не найдена страница urldecode: '.urldecode($_SERVER['REQUEST_URI']);
         }
 
-        $this->document = $this->htmlBack($this->document);// преобразуем запрещенный код в нормальный вид
+        if( isset($_SERVER['HTTP_REFERER']) ){
+            $messages[] = 'рефферер: '.$_SERVER['HTTP_REFERER'];
+            $messages[] = 'реферер urldecode: '.urldecode($_SERVER['HTTP_REFERER']);
+        }
 
-		$this->document = str_replace("\xEF\xBB\xBF", '', $this->document);// удаляем BOM-символы
+        if( !empty($error_message) ){
+            $messages[] = 'пояснение: '.$error_message;
+        }
 
-		$this-> meta();// получем мета-данные
+        if( isset($_SERVER['REMOTE_ADDR']) ){
+            $messages[] = 'IP: '.$_SERVER['REMOTE_ADDR'];
+        }
 
-		$this-> headers( array('Last-Modified' => filemtime($filePath) ) );// отправялем заголовки
+        if( isset($_SERVER['HTTP_USER_AGENT']) ){
+            $messages[] = 'браузер: '.$_SERVER['HTTP_USER_AGENT'];
+        }
 
-		echo $this->document;// выводим страницу
+        trigger_error(implode("\n", $messages), E_USER_NOTICE);
+
+        exit;
+    }
+
+    function header301($path = ''){
+
+        header("location: http://".$_SERVER['HTTP_HOST'].$path, true, 301);// 301 - Ресурс окончательно перенесен
+        exit;
+    }
+
+    function url($path = '', $allowGetData = false){
+
+        $return = array();
+
+        if( empty($path) ){
+            return $return;
+        }
+
+        $REQUEST_URI = $allowGetData? current( explode('?', $_SERVER['REQUEST_URI']) ) : $_SERVER['REQUEST_URI'];
+
+        $url = explode('/', $REQUEST_URI);
+
+        $e = explode('/', $path);
+
+        if( count($url) != count($e) ){
+            return $return;
+        }
+
+        foreach($e as $k => $v){
+
+            if( !isset($url[ $k ]) ){// если хоть один параметр URL не совпадает
+
+                return array();
+
+            }elseif( mb_substr($v,0,1) === '{' && mb_substr($v, -1) === '}' ){
+
+                $key = mb_substr($v, 1, -1);
+
+                $return[ $key ] = $url[ $k ];
+
+            }elseif( $v !== $url[ $k ] ){// если хоть один параметр URL не совпадает
+
+                return array();
+
+            }
+        }
+        return $return;
+    }
+
+    private $content = '';
+
+    /**
+     * получаем содержимое переменной (нужно, когда необходимо что-то поменять в ней и следом вывести данные)
+     * @return string
+     */
+    function getContent(){
+        return $this->content;
+    }
+
+    /**
+     * начинает построение документа
+     * @param string $filePath
+     * @return bool
+     */
+    function getTemplate($filePath = ''){
+
+        if( !is_file($filePath) ){
+            return false;
+        }
+
+        ob_start();
+        include_once($filePath);
+        $this->content = ob_get_contents();
+        ob_end_clean();
+
+    }
+
+    private $allow_get_data_in_url = false;
+
+    /**
+     * @param boolean $allow_get_data_in_url
+     */
+    public function setAllowGetDataInUrl($allow_get_data_in_url){
+        $this->allow_get_data_in_url = $allow_get_data_in_url;
+    }
+
+    /**
+     * @return boolean
+     */
+    public function getAllowGetDataInUrl(){
+        return $this->allow_get_data_in_url;
+    }
+
+    /**
+     * @var string доменное имя сайта
+     */
+    private $host = '';
+
+    /**
+     * @param string $host
+     */
+    public function setHost($host){
+        $this->host = $host;
+    }
+
+    /**
+     * @return string
+     */
+    public function getHost(){
+        return empty($this->host)? $_SERVER['HTTP_HOST'] : $this->host;
+    }
+
+	function __construct(){
+
+        $this->getTemplate($_SERVER['DOCUMENT_ROOT'].'/my.php');// проверим наличие возможного пользовательского кода
+
+        if( $this->getHost() !== $_SERVER['HTTP_HOST'] ){// если доменное имя указано неправильно - исправляем
+            header('location: http://'. $this->getHost().$_SERVER['REQUEST_URI'], true, 301);
+            exit;
+        }
+
+        if( $this->getAllowGetDataInUrl() ){// избавимся от гет-данных
+            $url = current( explode('?', $_SERVER['REQUEST_URI']) );
+        }else{
+            $url = $_SERVER['REQUEST_URI'];
+        }
+
+        if( empty($this->content) ){
+
+            $tpl = '/index.php';// основной файл шаблона
+
+            if( $url === $tpl ){// попытка обратиться к главному шаблону напрямую
+
+                $this->header301('/', 'нельзя обратиться к главному шаблону напрямую');
+
+            }elseif( empty($url) || $url === '/' ){// обращение к главной странице сайта
+
+                // файл шаблона не меняется
+
+            }elseif( mb_substr($url,-1) === '/' ){// обращение к директории (урл заканчивается на слэш)
+
+                $this->header301(mb_substr($url,0,-1), 'переадресация по слэшу в конце');
+
+            }else{// обращение к странице сайта
+
+                $ext = '.php';// расширение php-скриптов
+
+                if( mb_substr($url,-4) === $ext ){// попытка обратиться к php-шаблону напрямую
+
+                    $this->header301( mb_substr($url,0,-4) , 'нельзя обратиться к php-шаблону напрямую');
+
+                }else{
+
+                    $tpl = $url . $ext;
+
+                }
+
+            }
+
+            $filePath = $_SERVER['DOCUMENT_ROOT'].'/templates'.$tpl;
+
+            if( !is_file($filePath) ){
+                $this->header404('Шаблон страницы не найден');
+            }
+
+            $this->getTemplate($filePath);// начинаю построение документа
+
+            if( empty($this->content) ){
+                $this->header404('Шаблон страницы пуст');
+            }
+        }
+
+        $this->beforeLinksReplace();// сохраняем данные в которых нельзя производить замены
+
+        $preg_quote_host = $this->preg_quote_($_SERVER['HTTP_HOST']);
+
+        if($doc = preg_replace('/<a(.+)href=("|\'|)http:\/\/(?!'.$preg_quote_host.'|www\.'.$preg_quote_host.')(.*)("|\'|\s|)>/sUi', '<a$1href=$2http://'.$_SERVER['HTTP_HOST'].'/outer/r.php?to=http://$3$4 target=_blank>', $this->content)){
+            $this->content = $doc;
+        }
+
+        $this->content = htmlBack($this->content);// преобразуем запрещенный код в нормальный вид
+
+		$this->content = str_replace("\xEF\xBB\xBF", '', $this->content);// удаляем BOM-символы
+
+        $this->content = str_replace('<!--MetaData-->', '', str_replace('<!--/MetaData-->', '', $this->content));
+
+		$this->meta();// получем мета-данные
+
+		$this->headers( array('Last-Modified' => filemtime($filePath) ) );// отправялем заголовки
+
+		echo $this->content;// выводим страницу
 	}
 }
 
-$system = new Templier();
+new Templier();
