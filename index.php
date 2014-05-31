@@ -148,7 +148,7 @@ class Templier {
 		
 		// регулировка кэширования в браузерах
 		$ETag = 'ETagHash';//.md5($_SERVER['REQUEST_URI']);
-		if(!$_COOKIE[$ETag] || $_SERVER['REQUEST_METHOD']=='POST'){// устанавливается в первый раз при заходе на страницу
+		if(!isset($_COOKIE[$ETag]) || $_SERVER['REQUEST_METHOD']=='POST'){// устанавливается в первый раз при заходе на страницу
 			$etag_hash = md5(time());
 			setcookie($ETag, $etag_hash, (time()+86400), '/');
 		}else{
@@ -371,7 +371,7 @@ class Templier {
 
 	function __construct(){
 
-        $this->getTemplate($_SERVER['DOCUMENT_ROOT'].'/my.php');// проверим наличие возможного пользовательского кода
+        $this->getTemplate($_SERVER['DOCUMENT_ROOT'].'/before.php');// проверим наличие возможного пользовательского кода
 
         if( $this->getHost() !== $_SERVER['HTTP_HOST'] ){// если доменное имя указано неправильно - исправляем
             header('location: http://'. $this->getHost().$_SERVER['REQUEST_URI'], true, 301);
@@ -430,6 +430,8 @@ class Templier {
         }
 
         $this->beforeLinksReplace();// сохраняем данные в которых нельзя производить замены
+
+        @include_once($_SERVER['DOCUMENT_ROOT'].'/after.php');
 
         $preg_quote_host = $this->preg_quote_($_SERVER['HTTP_HOST']);
 

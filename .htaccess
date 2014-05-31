@@ -16,6 +16,9 @@ php_value display_errors 1
 RewriteEngine On
 RewriteBase /
 
+# Запретим внешний доступ к директории с шаблонами
+RewriteRule ^(templates|inner) - [F]
+
 # Обработка любого урл файлом index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
