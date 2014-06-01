@@ -82,45 +82,136 @@ class Templier {
 		$text = $dont_htmlspecialchars? $text :  htmlspecialchars( $text );
 		
 		// удяляем лишние пробелы
-		$text = preg_replace("/[\s]{2,}/u", " ", $text);
+		$text = preg_replace("/[\s]{2,}/u", ' ', $text);
 		
 		return $text;
 	}
+
+    private $title = '';
+
+    /**
+     * @return string
+     */
+    public function getTitle()
+    {
+        return $this->title;
+    }
+
+    /**
+     * @param string $title
+     */
+    public function setTitle($title)
+    {
+        $this->title = $title;
+    }
+
+    private $keywords = '';
+
+    /**
+     * @return string
+     */
+    public function getKeywords()
+    {
+        return $this->keywords;
+    }
+
+    /**
+     * @param string $keywords
+     */
+    public function setKeywords($keywords)
+    {
+        $this->keywords = $keywords;
+    }
+
+    private $description = '';
+
+    /**
+     * @return string
+     */
+    public function getDescription()
+    {
+        return $this->description;
+    }
+
+    /**
+     * @param string $description
+     */
+    public function setDescription($description)
+    {
+        $this->description = $description;
+    }
 
     /**
      * формирует переменные мета-данных
      */
     private function meta(){
-		
-		$metaData = '';// находим мета-данные по содержанию
-        preg_match_all('/<!--MetaData-->(.+)<!--\/MetaData-->/sUiu', $this->content, $meta);
-        if($meta['1']){
-            foreach($meta['1'] as $v){
-                if($v){ $metaData .= $v.' '; }
+
+        $title = $this->getTitle();
+        $keywords = $this->getKeywords();
+        $description = $this->getDescription();
+
+        if(empty($title) || empty($keywords) || empty($description)){
+
+            $metaData = '';// находим мета-данные по содержанию
+
+            preg_match_all('/<!--MetaData-->(.+)<!--\/MetaData-->/sUiu', $this->content, $meta);
+
+            if($meta['1']){
+
+                foreach($meta['1'] as $v){
+                    if(!empty($v)){ $metaData .= $v.' '; }
+                }
+
+                $this->content = str_replace('<!--MetaData-->', '', str_replace('<!--/MetaData-->', '', $this->content));
+            }
+
+            $name = '';// находим название страницы
+            preg_match_all('/<h1(.*)>(.+)<\/h1>/sUiu', $metaData, $h1);
+
+            if(isset($h1['2']) && !empty($h1['2'])){
+                $name = $h1['2']['0'].'.';
+                $metaData = str_replace($h1['0']['0'], '', $metaData);
+            }
+
+            $text = $name . $this->clear($metaData);
+
+            if($text){
+
+                $msie = preg_match('/(?i)msie [1-8]/',$_SERVER['HTTP_USER_AGENT']);// детектим Internet Explorer
+
+                if($meta['1']){
+
+                    foreach($meta['1'] as $v){
+                        if(!empty($v)){ $metaData .= $v.' '; }
+                    }
+
+                    $this->content = str_replace('<!--MetaData-->', '', str_replace('<!--/MetaData-->', '', $this->content));
+                }
+
+                $word = explode(' ', $text);// разбираем текст по словам
+
+                $titleText = $keywordsText = $descriptionText = '';
+
+                $x = 0;
+                for($i=0; ($i<100 || $x<500); $i++){// собираем данные
+
+                    if(isset($word[$i])){
+
+                        // 127 символов - максимум который IE может поместить в Избранное
+                        if($i<=25 && (!$msie || mb_strlen($titleText.$word[$i], 'utf-8')<128)){ $titleText .= $word[$i].' '; }
+
+                        if($i<=50 && mb_strlen($word[$i])>1){ $keywordsText .= $word[$i].', '; }
+
+                        if(mb_strlen($descriptionText)<200){ $descriptionText .= $word[$i].' '; }
+                    }
+                    $x++;
+                }
+
+                if(empty($title)){ $title = $titleText; }
+                if(empty($keywords)){ $keywords = $keywordsText; }
+                if(empty($description)){ $description = $descriptionText; }
             }
         }
-
-        $title = $keywords = $description = '';
-        $text = $this->clear($metaData);
-		
-		if($text){
-			
-            $word = explode(' ', $text);// разбираем текст по словам
-            
-            $x = 0;
-            for($i=0; ($i<100 || $x<500); $i++){// собираем данные
-				
-				if($word[$i]){
-					
-					if($i<=25 && (!$this->msie || mb_strlen($title.$word[$i], 'utf-8')<128)){ $title .= $word[$i].' '; }// 127 символов - максимум который IE может поместить в Избранное
-					
-					if($i<=50 && mb_strlen($word[$i])>1){ $keywords .= $word[$i].', '; }
-					
-					if(mb_strlen($description)<200){ $description .= $word[$i].' '; }
-				}
-				$x++;
-            }
-		}
 
 		$titleData = str_replace('&amp;', '&', trim($title));
 		if(mb_substr($titleData,-1)=='\\'){ $titleData = mb_substr($titleData,0,-1); }
@@ -130,12 +221,16 @@ class Templier {
 		if(mb_substr($descriptionData,-1)=='\\'){ $descriptionData = mb_substr($descriptionData,0,-1); }
 		$this->content = str_replace('[~description~]', $descriptionData, $this->content);
 		
-		$keywordsData = mb_substr(trim($keywords), 0, -1);// удаляем последнюю запятую
+		$keywordsData = trim($keywords);
+        // удаляем последнюю запятую
+        if(mb_substr($keywordsData,-1)==','){ $keywordsData = mb_substr($keywordsData,0,-1); }
 		$keywordsData = preg_replace("'\&(.+)\;'sUi", '',
             str_replace(array(')', ' ('), '',
                 str_replace('.,', ',',
                     str_replace(',,', ',',
-                        str_replace(':,', ',', $keywordsData)))));
+                        str_replace(':,', ',',
+                            str_replace('?,', ',', $keywordsData))))));
+        // если в конце слэш - удаляем его
 		if(mb_substr($keywordsData,-1)=='\\'){ $keywordsData = mb_substr($keywordsData,0,-1); }
 		$this->content = str_replace('[~keywords~]', $keywordsData, $this->content);
     }
@@ -432,8 +527,6 @@ class Templier {
         $this->content = htmlBack($this->content);// преобразуем запрещенный код в нормальный вид
 
 		$this->content = str_replace("\xEF\xBB\xBF", '', $this->content);// удаляем BOM-символы
-
-        $this->content = str_replace('<!--MetaData-->', '', str_replace('<!--/MetaData-->', '', $this->content));
 
 		$this->meta();// получем мета-данные
 
