@@ -212,16 +212,6 @@ class Templier {
     }
 
     /**
-     * собственный метод закавычивания символов регулярного выражения
-     * @param $str - текстовые данные
-     * @return mixed
-     */
-    private function preg_quote_($str){
-        $str = str_replace('-', '\-', str_replace('_', '\_', str_replace("'", "\\'", preg_quote($str, "/"))));
-        return $str;
-    }
-
-    /**
      * @param $error_message
      * @throws Exception
      */
@@ -433,9 +423,9 @@ class Templier {
 
         @include_once($_SERVER['DOCUMENT_ROOT'].'/after.php');
 
-        $preg_quote_host = $this->preg_quote_($_SERVER['HTTP_HOST']);
+        $preg_quote_host = preg_quote($_SERVER['HTTP_HOST'], '/');
 
-        if($doc = preg_replace('/<a(.+)href=("|\'|)http:\/\/(?!'.$preg_quote_host.'|www\.'.$preg_quote_host.')(.*)("|\'|\s|)>/sUi', '<a$1href=$2http://'.$_SERVER['HTTP_HOST'].'/outer/r.php?to=http://$3$4 target=_blank>', $this->content)){
+        if($doc = preg_replace('/<a(.+)href=("|\'|)http:\/\/(?!'.$preg_quote_host.'|www\.'.$preg_quote_host.')(.*)("|\'|\s|)>/sUi', '<a$1href=$2/outer/r.php?to=http://$3$4 target=_blank>', $this->content)){
             $this->content = $doc;
         }
 
