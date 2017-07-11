@@ -6,8 +6,6 @@ mb_internal_encoding("UTF-8");
 
 define('_', '~'.md5(uniqid(time())).'~');// спец. хэш
 
-if(mb_substr($_SERVER['DOCUMENT_ROOT'], -1)=='/'){ $_SERVER['DOCUMENT_ROOT'] = mb_substr($_SERVER['DOCUMENT_ROOT'], 0, -1); }
-
 $GLOBALS['Templier']['increment'] = 0;
 $GLOBALS['Templier']['before'] = array();
 $GLOBALS['Templier']['after'] = array();
@@ -57,7 +55,7 @@ class Templier {
 		if(mb_substr($file_path,0,1)=='/'){
 			return $file_path;
 		}else{
-			return $_SERVER['DOCUMENT_ROOT'].'/'.$file_path;
+			return __DIR__.'/'.$file_path;
 		}
 	}
 
@@ -456,7 +454,7 @@ class Templier {
 
 	function __construct(){
 
-        $this->getTemplate($_SERVER['DOCUMENT_ROOT'].'/before.php');// проверим наличие возможного пользовательского кода
+        $this->getTemplate(__DIR__.'/before.php');// проверим наличие возможного пользовательского кода
 
         if( $this->getHost() !== $_SERVER['HTTP_HOST'] ){// если доменное имя указано неправильно - исправляем
             header('location: http://'. $this->getHost().$_SERVER['REQUEST_URI'], true, 301);
@@ -501,7 +499,7 @@ class Templier {
 
             }
 
-            $filePath = $_SERVER['DOCUMENT_ROOT'].'/templates'.$tpl;
+            $filePath = __DIR__.'/templates'.$tpl;
 
             if( !is_file($filePath) ){
                 $this->header404('Шаблон страницы не найден');
@@ -516,7 +514,7 @@ class Templier {
 
         $this->beforeLinksReplace();// сохраняем данные в которых нельзя производить замены
 
-        @include_once($_SERVER['DOCUMENT_ROOT'].'/after.php');
+        @include_once(__DIR__.'/after.php');
 
         $preg_quote_host = preg_quote($_SERVER['HTTP_HOST'], '/');
 
